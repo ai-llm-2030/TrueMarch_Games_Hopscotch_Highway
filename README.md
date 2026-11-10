@@ -16,6 +16,13 @@
   <img src="assets/screenshot-play.png" alt="Hopscotch Highway — gameplay" width="820">
 </p>
 
+## More screenshots
+
+<table>
+<tr><td width="50%"><img src="assets/screenshot-map.png" alt="The world map: four lands"><br><sub>The world map: four lands</sub></td><td width="50%"><img src="assets/screenshot-stages.png" alt="Brickton's stages"><br><sub>Brickton's stages</sub></td></tr>
+<tr><td width="50%"><img src="assets/screenshot-chars.png" alt="25 hoppers to collect"><br><sub>25 hoppers to collect</sub></td><td width="50%"><img src="assets/screenshot-prize.png" alt="The Prize Machine"><br><sub>The Prize Machine</sub></td></tr>
+</table>
+
 ## Controls
 
 | Keys | Action |
