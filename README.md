@@ -10,6 +10,16 @@
   <a href="https://ai-llm-2030.github.io/TrueMarch_Games_Hopscotch_Highway/"><b>▶ Play Hopscotch Highway in your browser</b></a>
 </p>
 
+## What's new: Echo Road
+
+A new endless mode where you race your own past. Every hop you make is replayed by your **echo**, a purple ghost of your hopper, 3 seconds later. It walks straight through cars, trains and water; if it lands on you, the run is over. The further you get, the closer it follows (3.0 s down to 1.4 s), so you can no longer simply stand and wait for a gap: hop sideways and back to buy time. Glowing prints on the road show where it steps next, and they turn red just before it gets there.
+
+Try it: on the title choose **Echo Road** (arrow keys + Enter, or tap), then **Hop in**. Hop with ↑ ← ↓ → / W A S D / Space, or tap and swipe on a phone. Your Echo Road best is kept separately from Endless Hop.
+
+<p align="center">
+  <img src="assets/screenshot-echo.png" alt="Echo Road: your purple echo retraces your hops 3 seconds behind" width="820">
+</p>
+
 ## Gameplay
 
 <p align="center">

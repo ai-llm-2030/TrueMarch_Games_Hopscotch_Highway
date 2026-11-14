@@ -100,6 +100,9 @@
   .mb:hover, .mb.sel { background: #fff4c2; transform: translateY(-.12em); }
   .mb.sel { outline: .14em solid #ff8a3d; outline-offset: .1em; }
   .mb.hero { background: linear-gradient(90deg, #ffe57a, #ffc93a); }
+  .mb.echo { background: linear-gradient(90deg, #efe6ff, #d9c8ff); }
+  .mb.echo:hover, .mb.echo.sel { background: linear-gradient(90deg, #f6f0ff, #e6d9ff); }
+  .mb .newtag { display: inline-block; margin-left: .4em; padding: .05em .4em; border-radius: .5em; background: #7a4dff; color: #fff; font-size: .62em; letter-spacing: .08em; vertical-align: .15em; }
   .mb.hero b { font-size: 1.25em; }
   .rec { font-size: .8em; color: #6a6d80; margin: .8em 0 0; }
   .rec b { color: #c25a00; }
@@ -320,6 +323,7 @@
             <button class="mb hero wide" data-nav id="mCamp"><svg data-ic="flag"></svg><span><b>Four Lands</b><small id="mCampSub">32 stages · 4 set pieces</small></span></button>
             <button class="mb" data-nav id="mEnd"><svg data-ic="hop"></svg><span><b>Endless Hop</b><small id="mEndSub">How far can you get?</small></span></button>
             <button class="mb" data-nav id="mDaily"><svg data-ic="cal"></svg><span><b>Daily Road</b><small id="mDailySub">Same road for everyone</small></span></button>
+            <button class="mb wide echo" data-nav id="mEcho"><svg data-ic="echo"></svg><span><b>Echo Road<span class="newtag">NEW</span></b><small id="mEchoSub">Your past self hops 3 seconds behind you</small></span></button>
             <button class="mb" data-nav id="mPrize"><svg data-ic="prize"></svg><span><b>Prize Machine</b><small id="mPrizeSub">100 coins a capsule</small></span></button>
             <button class="mb" data-nav id="mChars"><svg data-ic="chars"></svg><span><b>Hoppers</b><small id="mCharsSub">Pick who hops</small></span></button>
             <button class="mb" data-nav id="mHow"><svg data-ic="how"></svg><span><b>How to play</b><small>Roads, rivers, rails</small></span></button>
@@ -507,6 +511,13 @@
     if (typeof SAVE.char !== 'string' || SAVE.chars.indexOf(SAVE.char) < 0) SAVE.char = 'pip';
   }
   function persist() { try { localStorage.setItem(KEY, JSON.stringify(SAVE)); } catch (e) { /* private mode */ } }
+  /* Echo Road keeps its own record under its own key, so the main save's shape never changes. */
+  var ECHO_KEY = 'gt_rivercross_echo', ECHO = { best: 0, runs: 0 };
+  try {
+    var eo = JSON.parse(localStorage.getItem(ECHO_KEY) || 'null');
+    if (eo && typeof eo === 'object') { ECHO.best = Math.max(0, +eo.best || 0) | 0; ECHO.runs = Math.max(0, +eo.runs || 0) | 0; }
+  } catch (e) { /* a broken record starts fresh */ }
+  function echoSave() { try { localStorage.setItem(ECHO_KEY, JSON.stringify(ECHO)); } catch (e) { /* private mode */ } }
   /* Motion off: the OS asks for reduced motion, or Settings → Reduced effects is on. */
   var OSCALM = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   function calm() { return !!SAVE.set.fx || OSCALM; }
@@ -899,11 +910,12 @@
     var nw = { cfg: cfg, rows: {}, genZ: -10, gen: newGen(cfg.seed >>> 0), t: 0, camZ: -3.5, vz: 0, started: false,
       parts: [], fl: [], met: [], metT: 3, scorch: [], hawk: null, chase: null, shake: 0, hs: 0,
       stats: { rails: 0, rivers: 0, roads: 0 }, coins: 0, maxZ: 0, won: false, over: false, endT: -1, time: 0,
-      lastB: biomeAt(cfg, 0), aiT: 0, auto: !!cfg.demo, warned: false, pruneT: 0, best: cfg.mode === 'endless' ? SAVE.endBest : 0,
+      lastB: biomeAt(cfg, 0), aiT: 0, auto: !!cfg.demo, warned: false, pruneT: 0, best: cfg.mode === 'endless' ? SAVE.endBest : cfg.mode === 'echo' ? ECHO.best : 0,
       // The pace this run STARTED on (Settings can change mid-run; the run does not).
       pace: SAVE.set.diff ? 1 : 0 };
     nw.p = { x: 4.5, z: 0, fz: 0, y: 0, hop: null, face: 0, alive: true, ride: null, rideRow: null, off: 0, land: 0, idle: 0, q: null, dead: null, bump: 0, bdir: 0, cheer: 0, sx: 4.5, sz: 0 };
     if (cfg.chase) nw.chase = { z: -5, v: cfg.chase };
+    if (cfg.mode === 'echo') nw.echo = { tr: [], prints: [], d: ECHO_D0, x: 4.5, z: 0, y: 0, f: 0, on: false, vis: true, near: 0 };
     ensureRows(nw, 34);
     return nw;
   }
@@ -983,6 +995,7 @@
       p.x = c + .5;
     } else p.x = c + .5;
     if (R.t === 'safe' || R.t === 'finish') { p.sx = p.x; p.sz = p.z; }
+    if (ww.echo) ww.echo.prints.push({ t: ww.time, x: p.x, z: p.z });
     var cv = R.coins[c];
     if (cv && R.t !== 'log') {
       delete R.coins[c]; ww.coins += cv;
@@ -1017,7 +1030,8 @@
     squash: ['Flattened!', 'That lane had traffic.'], drown: ['Splash!', 'The water is only safe where something floats.'],
     swept: ['Swept away!', 'Logs do not stop at the edge. Hop off in time.'], train: ['Express delivery!', 'Red lights mean a train is coming.'],
     hawk: ['Hawk snack!', 'Keep moving forward — the hawk takes the idle.'], meteor: ['Starstruck!', 'Step out of a growing shadow.'],
-    caught: ['Caught!', 'Never stop when something is chasing you.']
+    caught: ['Caught!', 'Never stop when something is chasing you.'],
+    echo: ['Echoed!', 'Your echo landed right where you stood.']
   };
   /* Failure teaches: under what hit you, one thing to try — at most twice per cause, then only the cause. */
   var DTIP = {
@@ -1027,7 +1041,8 @@
     train: 'When the red light blinks, stay on the near side until the train has gone by.',
     hawk: 'Keep hopping forward: the hawk only comes for a hopper that stands still or falls behind.',
     meteor: 'A growing shadow marks where a star lands — step sideways out of it.',
-    caught: 'Look two rows ahead so you never have to stop with something behind you.'
+    caught: 'Look two rows ahead so you never have to stop with something behind you.',
+    echo: 'Never wait where you stood a moment ago: to wait for a gap, hop sideways and back.'
   };
   function dtip(kind) {
     var k = 'tip_' + kind, n = SAVE.seen[k] | 0;
@@ -1048,6 +1063,7 @@
     var Rr = getRow(ww, p.z);
     if (kind === 'squash' || kind === 'caught') { sfx('squash'); burst(ww, p.x, p.z + .5, Rr.h + .3, 14, [ch.c[0], ch.c[1], '#ffffff'], 4, 4, .06, .9); }
     if (kind === 'caught') sfx('roar');
+    if (kind === 'echo') { sfx('squash'); burst(ww, p.x, p.z + .5, Rr.h + .3, 18, ['#8a6bff', '#d9c8ff', ch.c[0]], 4, 5, .06, 1); }
     if (kind === 'drown' || kind === 'swept') { sfx('splash'); burst(ww, p.x, p.z + .5, Rr.h + .1, 16, ['#ffffff', '#cfefff', '#9fdcff'], 3, 6, .06, .8); }
     if (kind === 'train') { sfx('squash'); p.dead.vx = (R ? R.dir : 1) * 9; p.dead.vy = 7; burst(ww, p.x, p.z + .5, .5, 18, [ch.c[0], ch.c[1], '#ffffff'], 6, 6, .06, 1); }
     if (kind === 'meteor') burst(ww, p.x, p.z + .5, .3, 16, ['#2b2d42', '#555', ch.c[0]], 4, 6, .07, 1);
@@ -1095,12 +1111,51 @@
   }
   function meteorRate(ww) {
     if (ww.cfg.met) return ww.cfg.met;
-    if ((ww.cfg.mode === 'endless' || ww.cfg.mode === 'daily') && biomeAt(ww.cfg, ww.p.z) === 3) return .4 + diffAt(ww.cfg, ww.p.z) * .4;
+    if ((ww.cfg.mode === 'endless' || ww.cfg.mode === 'daily' || ww.cfg.mode === 'echo') && biomeAt(ww.cfg, ww.p.z) === 3) return .4 + diffAt(ww.cfg, ww.p.z) * .4;
     return 0;
   }
   function creepRate(ww) {
     var c = ww.cfg, base = c.mode === 'camp' ? .15 + diffAt(c, ww.maxZ) * .3 : .2 + Math.min(.45, ww.maxZ / 350);
     return base * (ww.pace ? 1 : .6);
+  }
+
+  /* ── Echo Road: your own hops come back for you ─────────────────────────
+     Every frame of your run is recorded; your echo replays it ECHO delay seconds later,
+     through traffic and water alike (it is only an echo). If it lands on you, the run ends.
+     The delay shrinks as you get further, so waiting gets harder: hop aside and back to wait. */
+  var ECHO_D0 = 3, ECHO_DMIN = 1.4;
+  function echoDelay(z) { return Math.max(ECHO_DMIN, ECHO_D0 - Math.floor(Math.max(0, z) / 15) * .2); }
+  function echoStep(ww, dt) {
+    var e = ww.echo, p = ww.p, tr = e.tr, live = ww === w && !ww.cfg.demo;
+    if (!ww.started || !p.alive || ww.won) return;
+    tr.push({ t: ww.time, x: p.x, z: p.fz, y: p.y, f: p.face });
+    var tgt = echoDelay(ww.maxZ);
+    if (e.d > tgt) { e.d = Math.max(tgt, e.d - dt * .3); if (live && e.d === tgt) { banner('Echo ' + tgt.toFixed(1) + 's'); sfx('warn'); } }
+    var et = ww.time - e.d;
+    while (tr.length > 2 && tr[1].t <= et) tr.shift();
+    while (e.prints.length && e.prints[0].t <= et) e.prints.shift();
+    if (et < 0) { e.on = false; e.x = tr[0].x; e.z = tr[0].z; e.y = 0; e.f = 0; return; }
+    var a = tr[0], b = tr[1] || a, k = b.t > a.t ? clamp((et - a.t) / (b.t - a.t), 0, 1) : 0;
+    e.x = lerp(a.x, b.x, k); e.z = lerp(a.z, b.z, k); e.y = lerp(a.y, b.y, k); e.f = a.f;
+    if (!e.on) { e.on = true; if (live) { sfx('fall'); if (!SAVE.seen.echoOn) { SAVE.seen.echoOn = 1; persist(); toast('Here comes your echo. It retraces every hop — never let it land on you!'); } } }
+    // how close is it, in time: the newest moment you stood where the echo now is
+    var gap = Math.abs(e.z - p.fz) + Math.abs(e.x - p.x);
+    e.near = gap < 1.6 ? 1 - gap / 1.6 : 0;
+    if (Math.abs(e.z - p.fz) < .5 && Math.abs(e.x - p.x) < .55 && p.y < .3 && e.y < .3) die(ww, 'echo');
+  }
+  function drawEcho(ww) {
+    var e = ww.echo, z0 = Math.floor(e.z), fr = e.z - z0, gy = lerp(surf(ww, z0), surf(ww, z0 + 1), fr);
+    var a = e.on ? .72 : .3 + .12 * Math.sin(ww.t * 5);
+    X.globalAlpha = e.on ? .45 + .15 * Math.sin(ww.t * 8) : .2; ell(e.x, e.z + .5, gy + .01, .44, '#7a4dff'); X.globalAlpha = 1;
+    drawModel(curChar(), e.x, e.z + .5, gy + e.y, e.f, 1, 1, a, '#8a6bff');
+  }
+  function drawPrints(ww, R) {
+    var e = ww.echo, i, f, et = ww.time - e.d;
+    for (i = 0; i < e.prints.length; i++) {
+      f = e.prints[i]; if (f.z !== R.z || isWater(R.t)) continue;
+      var soon = clamp(1 - (f.t - et) / e.d, 0, 1);
+      X.globalAlpha = .5 + soon * .4; ell(f.x, f.z + .5, R.h + .01, .18 + soon * .1, soon > .7 ? '#ff3d6e' : '#7a4dff'); X.globalAlpha = 1;
+    }
   }
 
   /* ── One simulation step ────────────────────────────────────────────── */
@@ -1118,7 +1173,7 @@
     if (ww.auto) autoStep(ww, dt);
     if (p.bump > 0) p.bump -= dt;
     if (p.land > 0) p.land -= dt;
-    if (p.alive && !ww.won) stepAlive(ww, dt);
+    if (p.alive && !ww.won) { stepAlive(ww, dt); if (ww.echo && p.alive) echoStep(ww, dt); }
     else if (!p.alive) {
       var dd = p.dead; dd.t += dt;
       if (dd.k === 'train') { dd.x += dd.vx * dt; dd.vy -= 18 * dt; dd.y = Math.max(-2, dd.y + dd.vy * dt); }
@@ -1549,7 +1604,7 @@
       else if (face === 2) { x0 = -b[1]; x1 = -b[0]; z0 = -b[5]; z1 = -b[4]; }
       else if (face === 1) { x0 = b[4]; x1 = b[5]; z0 = -b[1]; z1 = -b[0]; }
       else { x0 = -b[5]; x1 = -b[4]; z0 = b[0]; z1 = b[1]; }
-      var item = [x + x0 * sqxz, x + x1 * sqxz, z + z0 * sqxz, z + z1 * sqxz, y + b[2] * sqy, y + b[3] * sqy, dark ? '#3a3c52' : b[6], b[7] == null ? a : b[7] * a];
+      var item = [x + x0 * sqxz, x + x1 * sqxz, z + z0 * sqxz, z + z1 * sqxz, y + b[2] * sqy, y + b[3] * sqy, dark ? (typeof dark === 'string' ? dark : '#3a3c52') : b[6], b[7] == null ? a : b[7] * a];
       for (j = list.length; j > 0 && cmpBox(list[j - 1], item) > 0; j--) list[j] = list[j - 1];
       list[j] = item;
     }
@@ -1657,6 +1712,7 @@
     var showP = !(ww.hawk && ww.hawk.t >= .55) && !(p.dead && p.dead.k === 'caught' && p.dead.t > .15);
     if (showP && Math.floor(p.fz + 1e-6) === z) it.push({ x: (p.dead ? p.dead.x : p.x) - .3, k: 7 });
     if (ww.chase && Math.max(Math.floor(ww.chase.z - 2), ZLO) === z) it.push({ x: 999, k: 8 });
+    if (ww.echo) { drawPrints(ww, R); if (!p.dead || p.dead.k !== 'echo' || p.dead.t < .1) { if (Math.floor(ww.echo.z + 1e-6) === z) it.push({ x: ww.echo.x - .31, k: 9 }); } }
     it.sort(function (a, b) { return a.x - b.x; });
     for (i = 0; i < it.length; i++) {
       var q = it[i];
@@ -1670,6 +1726,7 @@
         case 6: drawTrain(R); break;
         case 7: drawPlayer(ww); break;
         case 8: drawChaser(ww); break;
+        case 9: drawEcho(ww); break;
       }
     }
   }
@@ -1686,7 +1743,7 @@
     else gy = surf(ww, p.z);
     if (p.dead) {
       var d = p.dead; x = d.x;
-      if (d.k === 'squash' || d.k === 'caught') { sq = .18; sxz = 1.3; }
+      if (d.k === 'squash' || d.k === 'caught' || d.k === 'echo') { sq = .18; sxz = 1.3; }
       else if (d.k === 'drown' || d.k === 'swept') { y = -Math.min(1, d.t * 1.3) * .9; a = Math.max(0, 1 - d.t * 1.5); }
       else if (d.k === 'train') { y = d.y; a = Math.max(0, 1 - d.t * .8); face = (Math.floor(d.t * 12) % 4); }
       else if (d.k === 'meteor') { dark = true; sq = .7; }
@@ -2016,6 +2073,11 @@
       var st = starTimes(cfg), tm = ww.time, stars = tm <= st.t3 ? 3 : tm <= st.t2 ? 2 : 1;
       txtO('★★★'.slice(0, stars) + '☆☆'.slice(0, 3 - stars) + ' ' + mmss(tm), W / 2, by + bh + u * .25, u * .72, '#ffe27a');
     } else txtO('TOP ' + Math.max(ww.best, ww.maxZ), W / 2, u * 2.6, u * .75, '#ffe9a8');
+    if (ww.echo) {
+      var e = ww.echo, el = e.on ? 'ECHO ' + e.d.toFixed(1) + 's behind' : ww.started ? 'ECHO in ' + Math.max(0, e.d - ww.time).toFixed(1) + 's' : 'ECHO waits for your first hop';
+      txtO(el, W / 2, u * 3.55, u * .66, e.near > .35 && Math.floor(ww.t * 8) % 2 ? '#ff6b8a' : '#cbb8ff');
+      if (e.near > 0 && p.alive) { X.fillStyle = 'rgba(122,77,255,' + (e.near * .28) + ')'; X.fillRect(0, 0, W, u * .5); X.fillRect(0, H - u * .5, W, u * .5); }
+    }
     if (p.alive && ww.started && !ww.chase && !ww.won) {
       var dz = p.z - ww.camZ;
       if (dz < 1.4) {
@@ -2168,6 +2230,7 @@
     cal: '<rect x="7" y="10" width="34" height="30" rx="4" fill="#fff" stroke="#24263a" stroke-width="3"/><path d="M7 18h34" stroke="#24263a" stroke-width="3"/><path d="M15 6v8M33 6v8" stroke="#24263a" stroke-width="3"/><text x="24" y="35" font-size="14" font-weight="900" text-anchor="middle" fill="#ff5a5f" font-family="sans-serif">24</text>',
     prize: '<circle cx="24" cy="17" r="12" fill="#d2f0ff" stroke="#24263a" stroke-width="2.5"/><circle cx="20" cy="18" r="4" fill="#ff5a5f"/><circle cx="28" cy="15" r="4" fill="#4d9bff"/><rect x="13" y="28" width="22" height="15" rx="2" fill="#ff5a5f" stroke="#24263a" stroke-width="2.5"/><rect x="21" y="34" width="6" height="6" fill="#24263a"/>',
     chars: '<rect x="6" y="20" width="16" height="16" fill="#ffe14d" stroke="#24263a" stroke-width="2.5"/><rect x="26" y="16" width="16" height="20" fill="#f6f2ea" stroke="#24263a" stroke-width="2.5"/><rect x="29" y="8" width="4" height="9" fill="#f6f2ea" stroke="#24263a" stroke-width="2"/><rect x="35" y="8" width="4" height="9" fill="#f6f2ea" stroke="#24263a" stroke-width="2"/><path d="M4 40h40" stroke="#24263a" stroke-width="3"/>',
+    echo: '<rect x="6" y="18" width="16" height="16" fill="#b9a2ff" stroke="#6b4fd8" stroke-width="2.5" stroke-dasharray="4 3"/><rect x="24" y="14" width="18" height="18" fill="#ffe14d" stroke="#24263a" stroke-width="2.5"/><rect x="35" y="18" width="3" height="3" fill="#24263a"/><rect x="40" y="22" width="5" height="4" fill="#ff9b2f"/><path d="M4 42h40" stroke="#24263a" stroke-width="3"/><path d="M14 12c3-5 9-6 13-3" stroke="#6b4fd8" stroke-width="2.5" fill="none" stroke-dasharray="3 3"/>',
     how: '<circle cx="24" cy="24" r="17" fill="#fff" stroke="#24263a" stroke-width="3"/><path d="M18 19c0-4 3-6 6-6s6 2 6 6c0 5-6 5-6 10" stroke="#24263a" stroke-width="3.5" fill="none" stroke-linecap="round"/><circle cx="24" cy="35" r="2.4" fill="#24263a"/>',
     gear: '<circle cx="24" cy="24" r="8" fill="#fff" stroke="#24263a" stroke-width="4"/><path d="M24 5v7M24 36v7M5 24h7M36 24h7M10.5 10.5l5 5M32.5 32.5l5 5M10.5 37.5l5-5M32.5 15.5l5-5" stroke="#24263a" stroke-width="4" stroke-linecap="round"/>'
   };
@@ -2235,7 +2298,19 @@
   }
   function endlessCfg() { return { mode: 'endless', seed: (Math.random() * 4294967296) >>> 0, name: 'Endless Hop' }; }
   function dailyCfg() { return { mode: 'daily', seed: hashStr('hh-daily-' + dayKey(new Date())), name: 'Daily Road' }; }
-  function cfgAgain(c) { return c.mode === 'camp' ? campCfg(c.b, c.i) : c.mode === 'daily' ? dailyCfg() : endlessCfg(); }
+  function echoCfg() { return { mode: 'echo', seed: (Math.random() * 4294967296) >>> 0, name: 'Echo Road' }; }
+  function cfgAgain(c) { return c.mode === 'camp' ? campCfg(c.b, c.i) : c.mode === 'daily' ? dailyCfg() : c.mode === 'echo' ? echoCfg() : endlessCfg(); }
+  function modeName(c) { return c.mode === 'daily' ? 'Daily Road' : c.mode === 'echo' ? 'Echo Road' : 'Endless Hop'; }
+  /* The Echo Road card: the rule, once, before every run (it is short). */
+  function echoIntro() {
+    pendingCfg = echoCfg();
+    $('inKick').textContent = 'New mode · endless';
+    $('inName').textContent = 'Echo Road';
+    $('inGoal').textContent = 'Your echo replays every hop you make, 3 seconds later. Never let it land on you.';
+    $('inStars').innerHTML = 'It walks through cars and water. The gap shrinks as you go: 3.0s → 1.4s.' + (ECHO.best ? '<br>Best ' + ECHO.best + ' rows' : '');
+    $('inTip').textContent = (TOUCH ? 'Tap to hop, swipe to dodge. ' : 'Arrows / WASD to hop. ') + 'Need to wait for a gap? Hop sideways and back — the glowing prints show where it steps next.';
+    show('uiIntro'); $('inGo').classList.add('sel');
+  }
 
   /* ══ Title (a live road behind the menu) ═════════════════════════════════ */
   function demoWorld(again) {
@@ -2252,6 +2327,7 @@
     var lands = 0; for (var b = 0; b < 4; b++) if (stStars(b, 7)) lands++;
     $('mCampSub').textContent = $('mCampSub').dataset.base = ts ? lands + ' of 4 lands done · ' + ts + ' ★' : '32 stages across 4 lands';
     $('mDailySub').textContent = SAVE.daily[dk] ? 'Today: ' + SAVE.daily[dk] + ' — beat it?' : 'Same road for everyone today';
+    $('mEchoSub').textContent = ECHO.best ? 'Your best: ' + ECHO.best + ' — outrun yourself' : 'Your past self hops 3 seconds behind you';
     $('mEndSub').textContent = SAVE.endBest ? 'Your best: ' + SAVE.endBest + ' — go further' : 'How far can you get?';
     $('mPrizeSub').textContent = freeReady() ? 'Free capsule today!' : SAVE.coins >= 100 ? 'You can afford a capsule!' : '100 coins a capsule';
     $('mCharsSub').textContent = 'Hopping as ' + CH[curChar()].name;
@@ -2336,6 +2412,7 @@
       SAVE.stats.runs++; persist();
       if (cfg.mode === 'camp') { banner(cfg.boss ? 'Run!' : 'Hop!'); if (cfg.boss) toast('The ' + BIO[cfg.b].chaser + ' is right behind you — keep hopping!'); if (cfg.tip && !SAVE.seen['t_' + cfg.tip]) { SAVE.seen['t_' + cfg.tip] = 1; persist(); toast(TIPS[cfg.tip]); } }
       else if (cfg.mode === 'daily') banner('Daily Road');
+      else if (cfg.mode === 'echo') { banner('Echo Road'); toast('Hop to start: your echo follows 3 seconds behind.'); }
       else { banner(BIO[0].name); if (!SAVE.seen.t_hop) { SAVE.seen.t_hop = 1; persist(); toast(TOUCH ? 'Tap to hop forward, swipe to hop any way.' : 'Hop with the arrows or WASD. Keep moving forward!'); } }
     });
   }
@@ -2379,17 +2456,21 @@
           SAVE.streak = { n: SAVE.streak.last === y ? SAVE.streak.n + 1 : 1, last: dk };
         }
         var keys = Object.keys(SAVE.daily).sort(); while (keys.length > 40) delete SAVE.daily[keys.shift()];
+      } else if (cfg.mode === 'echo') {
+        prev = ECHO.best; ECHO.runs++;
+        if (score > prev) { ECHO.best = score; isBest = true; }
+        echoSave();
       } else {
         prev = SAVE.endBest;
         if (score > prev) { SAVE.endBest = score; isBest = true; }
         Arcade.best('rivercross', score);
       }
       SAVE.coins += coins; persist();
-      h = '<div class="kicker">' + (cfg.mode === 'daily' ? 'Daily Road · ' + dk : 'Endless Hop') + '</div>' +
+      h = '<div class="kicker">' + (cfg.mode === 'daily' ? 'Daily Road · ' + dk : modeName(cfg)) + '</div>' +
         '<h2 class="ttl red">' + esc(D[0]) + '</h2>' +
         '<p class="sub" style="margin:.2em auto .2em">' + esc(D[1]) + '</p>' + tip +
-        '<div class="big">' + score + '</div>' + (isBest ? '<div class="newbest">★ New best ★</div>' : '<div class="sub" style="margin:0">Best ' + (cfg.mode === 'daily' ? (SAVE.daily[dk] || 0) + ' today' : SAVE.endBest) + '</div>') +
-        '<div class="sum"><div>Rails<b>' + ww.stats.rails + '</b></div><div>Rivers<b>' + ww.stats.rivers + '</b></div><div>Time<b>' + mmss(ww.time) + '</b></div>' + (cfg.mode === 'daily' ? '<div>Streak<b>' + SAVE.streak.n + '</b></div>' : '') + '</div>' +
+        '<div class="big">' + score + '</div>' + (isBest ? '<div class="newbest">★ New best ★</div>' : '<div class="sub" style="margin:0">Best ' + (cfg.mode === 'daily' ? (SAVE.daily[dk] || 0) + ' today' : cfg.mode === 'echo' ? ECHO.best : SAVE.endBest) + '</div>') +
+        '<div class="sum"><div>Rails<b>' + ww.stats.rails + '</b></div><div>Rivers<b>' + ww.stats.rivers + '</b></div><div>Time<b>' + mmss(ww.time) + '</b></div>' + (cfg.mode === 'daily' ? '<div>Streak<b>' + SAVE.streak.n + '</b></div>' : '') + (ww.echo ? '<div>Echo gap<b>' + ww.echo.d.toFixed(1) + 's</b></div>' : '') + '</div>' +
         '<div class="coins">● +' + coins + ' · ' + SAVE.coins + ' total</div>' +
         '<div class="row"><button class="nb" data-nav data-enter id="rRetry">Hop again <small>Enter</small></button>' +
         (SAVE.coins >= 100 || freeReady() ? '<button class="nb gold" data-nav id="rPrize">Prize Machine</button>' : '') +
@@ -2408,7 +2489,7 @@
       if (paused || scene !== 'play' || !w || w.over || FD) return;
       paused = true; PT = null;
       if (RUN.mode === 'camp') { var g = goalProg(w); $('psGoal').textContent = goalText(RUN.goal); $('psSub').textContent = g[2] + ' ' + g[0] + '/' + g[1] + ' · ' + mmss(w.time); }
-      else { $('psGoal').textContent = RUN.mode === 'daily' ? 'Daily Road' : 'Endless Hop'; $('psSub').textContent = 'Distance ' + w.maxZ + ' · Coins ' + w.coins; }
+      else { $('psGoal').textContent = modeName(RUN); $('psSub').textContent = 'Distance ' + w.maxZ + ' · Coins ' + w.coins; }
       $('psOut').textContent = RUN.mode === 'camp' ? 'Quit to map' : 'Quit to title';
       show('uiPause'); sfx('ui');
     } else {
@@ -2720,6 +2801,7 @@
   on('mEnd', function () { sfx('ui'); begin(endlessCfg()); });
   on('mCamp', function () { sfx('ui'); goMap(); });
   on('mDaily', function () { sfx('ui'); begin(dailyCfg()); });
+  on('mEcho', function () { sfx('ui'); echoIntro(); });
   on('mPrize', function () { sfx('ui'); showPrize(); });
   on('mChars', function () { sfx('ui'); showChars(); });
   on('mHow', function () { sfx('ui'); showHow(); });
